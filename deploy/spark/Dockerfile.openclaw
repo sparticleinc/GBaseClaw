@@ -1,0 +1,64 @@
+FROM gbase-openclaw-real AS openclaw-native
+
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV WORKSPACE=/workspace
+ENV OPENCLAW_WORKSPACE=/workspace
+
+# System tools + SSH server
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-server curl wget git jq vim nano less \
+    build-essential libpq-dev ca-certificates gnupg \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /var/run/sshd \
+    && sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
+    && echo "AllowTcpForwarding no" >> /etc/ssh/sshd_config \
+    && echo "X11Forwarding no" >> /etc/ssh/sshd_config
+
+# OpenClaw skill dependencies + s3fs for per-user S3 storage
+# - gh: github + gh-issues skills
+# - ripgrep: session-logs skill
+# - tmux: tmux skill (interactive CLI control)
+# - ffmpeg: video-frames skill
+# - s3fs: mount SeaweedFS S3 buckets as local filesystem
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ripgrep tmux ffmpeg s3fs \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 22 (for Claude Code + native OpenClaw CLI)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Claude Code CLI + OpenClaw skill CLIs
+RUN npm install -g @anthropic-ai/claude-code clawhub
+
+# Python packages
+COPY deploy/spark/openclaw/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+
+# MCP server + HTTP exec server + entrypoint
+COPY deploy/spark/openclaw/mcp_server.py /openclaw/mcp_server.py
+COPY deploy/spark/openclaw/app.py /openclaw/app.py
+COPY deploy/spark/openclaw/entrypoint.sh /openclaw/entrypoint.sh
+RUN chmod +x /openclaw/entrypoint.sh /openclaw/mcp_server.py
+
+# Native OpenClaw CLI (copied from gateway image)
+COPY --from=openclaw-native /app /opt/openclaw
+RUN ln -s /opt/openclaw/openclaw.mjs /usr/local/bin/openclaw \
+    && chmod +x /usr/local/bin/openclaw
+
+# Create workspace
+RUN mkdir -p /workspace
+
+EXPOSE 22 8080 18789
+
+CMD ["/openclaw/entrypoint.sh"]

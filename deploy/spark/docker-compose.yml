@@ -1,0 +1,289 @@
+services:
+  # ─── 基础设施 ───
+  postgres:
+    image: postgres:16.5
+    restart: always
+    environment:
+      POSTGRES_USER: gbase
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gbase123}
+      POSTGRES_DB: gbase
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gbase"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    restart: always
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx2g"
+      - network.host=0.0.0.0
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ports:
+      - "127.0.0.1:9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  seaweedfs:
+    image: chrislusf/seaweedfs
+    restart: always
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-admin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-admin123}
+    volumes:
+      - seaweedfs_data:/data
+      - ./seaweedfs/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    ports:
+      - "127.0.0.1:9333:9333"
+      - "127.0.0.1:8333:8333"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9333/cluster/status || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # ─── 应用服务 ───
+  backend:
+    image: gbase-backend
+    build:
+      context: ../../backend
+      dockerfile: ../deploy/spark/Dockerfile.backend
+      network: host
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file: .env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=gbase
+      - DB_PASSWORD=${DB_PASSWORD:-gbase123}
+      - DB_NAME=gbase
+      - REDIS_URL=redis://redis:6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_BACKEND_URL=redis://redis:6379/0
+      - VECTOR_STORAGE_QDRANT_URL=http://qdrant:6333
+      - VECTOR_STORAGE_QDRANT_HOST=qdrant
+      - VECTOR_STORAGE_QDRANT_GRPC_PORT=6334
+      - OPENSEARCH_URL=http://opensearch:9200
+      - AWS_S3_ENDPOINT_URL=http://seaweedfs:8333
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY:-admin}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY:-admin123}
+      - AWS_S3_BUCKET_NAME=${S3_BUCKET:-gbase}
+      - FILE_STORAGE=s3
+      - SCRAPLING_BASE_URL=http://scrapling:8000
+      - OPENCLAW_API_URL=http://openclaw-lirh:8080
+      - OPENCLAW_API_KEY=${OPENCLAW_API_KEY:-}
+      - UTILITY_MODEL=${UTILITY_MODEL:-gpt-4.1-mini}
+      - SANDBOX_ENV_DIR=/sandbox-env
+      - OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+    volumes:
+      - .:/sandbox-env:ro
+      - ../../backend/mygpt:/backend/mygpt:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/docs || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  celery:
+    image: gbase-celery
+    build:
+      context: ../../backend
+      dockerfile: ../deploy/spark/Dockerfile.celery
+      network: host
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file: .env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=gbase
+      - DB_PASSWORD=${DB_PASSWORD:-gbase123}
+      - DB_NAME=gbase
+      - REDIS_URL=redis://redis:6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_BACKEND_URL=redis://redis:6379/0
+      - VECTOR_STORAGE_QDRANT_URL=http://qdrant:6333
+      - VECTOR_STORAGE_QDRANT_HOST=qdrant
+      - VECTOR_STORAGE_QDRANT_GRPC_PORT=6334
+      - OPENSEARCH_URL=http://opensearch:9200
+      - AWS_S3_ENDPOINT_URL=http://seaweedfs:8333
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY:-admin}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY:-admin123}
+      - AWS_S3_BUCKET_NAME=${S3_BUCKET:-gbase}
+      - FILE_STORAGE=s3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: gbase-frontend
+    build:
+      context: ../../mygpt-frontend
+      dockerfile: apps/admin/Dockerfile
+      network: host
+      args:
+        DEPLOY_STAGE: local_deploy
+    restart: always
+    depends_on:
+      - backend
+    # nginx 内部只提供静态文件，由外层 nginx 反代
+
+  # OpenClaw sandboxes are per-user containers managed by add-user.sh
+  # They use SSH access (port 2201+) instead of HTTP proxy
+  # Build image: docker compose build openclaw-builder
+  openclaw-builder:
+    image: gbase-openclaw
+    build:
+      context: ../..
+      dockerfile: deploy/spark/Dockerfile.openclaw
+      network: host
+    profiles:
+      - build-only
+
+  # Real OpenClaw gateway — native Lit Web UI + WebSocket control plane
+  # Version control: set OPENCLAW_VERSION in .env (default: v2026.3.8)
+  # Upgrade: docker compose build --build-arg OPENCLAW_VERSION=vX.Y.Z openclaw-gateway
+  openclaw-gateway:
+    image: gbase-openclaw-real
+    build:
+      context: ../..
+      dockerfile: deploy/spark/Dockerfile.openclaw-real
+      network: host
+      args:
+        OPENCLAW_VERSION: ${OPENCLAW_VERSION:-main}
+        OPENCLAW_REPO: ${OPENCLAW_REPO:-https://github.com/sparticleinc/GBaseClaw.git}
+    restart: always
+    command: ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan"]
+    environment:
+      - OPENCLAW_GATEWAY_PORT=18789
+      - OPENCLAW_GATEWAY_BIND=0.0.0.0
+      - GBASE_API_URL=http://backend:8000
+      - GBASE_API_KEY=${GBASE_INTERNAL_API_KEY:-}
+      - GBASE_INTERNAL_API_KEY=${GBASE_INTERNAL_API_KEY:-}
+      - GBASE_MAX_RISK=${GBASE_MAX_RISK:-R1}
+    volumes:
+      - openclaw_gateway_data:/root/.openclaw
+      - ./openclaw/gbase-plugin:/root/.openclaw/extensions/gbase
+    ports:
+      - "127.0.0.1:18789:18789"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:18789/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+
+  scrapling:
+    image: pyd4vinci/scrapling:latest
+    command: ["mcp", "--http", "--host", "0.0.0.0", "--port", "8000"]
+    restart: always
+    ports:
+      - "127.0.0.1:8200:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+
+  # ─── 沙盒自动创建 ───
+  sandbox-provisioner:
+    build:
+      context: ./sandbox-provisioner
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro
+      - ./:/deploy
+    environment:
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-gbasec0ca799a}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-5064d4a9e1d5a5e3}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-782a7e872448f75aaa23c6246272bbab6f0a824802cf91f0}
+    expose:
+      - "8090"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  # ─── 反向代理 ───
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+      - openclaw-gateway
+
+volumes:
+  pg_data:
+  redis_data:
+  qdrant_data:
+  opensearch_data:
+  seaweedfs_data:
+  openclaw_gateway_data:
