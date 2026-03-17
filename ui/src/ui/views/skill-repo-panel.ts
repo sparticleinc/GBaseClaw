@@ -12,6 +12,7 @@ export type SkillRepoPanelProps = {
   onPush: (message?: string) => void;
   onPull: () => void;
   onTag: (tag: string, message?: string) => void;
+  onSaveToken: (token: string) => void;
 };
 
 export function renderSkillRepoPanel(props: SkillRepoPanelProps) {
@@ -54,13 +55,9 @@ function renderBody(
     return nothing;
   }
 
-  // No gh auth
+  // No gh auth — show token input
   if (!status.ghAuth) {
-    return html`
-      <div class="callout danger" style="margin-top: 12px">
-        GitHub CLI not authenticated. Run <code>gh auth login</code> in terminal.
-      </div>
-    `;
+    return renderTokenForm(props, busy);
   }
 
   // Not initialized
@@ -72,40 +69,82 @@ function renderBody(
   return renderInitialized(props, status, busy);
 }
 
-function renderInitForm(props: SkillRepoPanelProps, busy: string | null) {
-  // Closure variables to capture input values without component state
-  let orgValue = "";
-  let repoValue = "";
+function readInputValue(button: HTMLElement, name: string): string {
+  const container = button.closest("section") ?? button.parentElement;
+  if (!container) {
+    return "";
+  }
+  const input = container.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+  return input?.value?.trim() ?? "";
+}
 
+function renderTokenForm(props: SkillRepoPanelProps, busy: string | null) {
+  return html`
+    <div style="margin-top: 12px;">
+      <div class="muted" style="margin-bottom: 8px;">
+        Enter your GitHub Personal Access Token to connect.
+        Create one at
+        <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer">github.com/settings/tokens</a>
+        with <code>repo</code> scope.
+      </div>
+      <label class="field">
+        <span>GitHub Token</span>
+        <input
+          type="password"
+          name="repo-token"
+          placeholder="ghp_..."
+          autocomplete="off"
+        />
+      </label>
+      <button
+        class="btn primary"
+        style="margin-top: 8px;"
+        ?disabled=${busy === "auth"}
+        @click=${(e: Event) => {
+          const token = readInputValue(e.currentTarget as HTMLElement, "repo-token");
+          if (token) {
+            props.onSaveToken(token);
+          }
+        }}
+      >
+        ${busy === "auth" ? "Saving…" : "Save Token"}
+      </button>
+    </div>
+  `;
+}
+
+function renderInitForm(props: SkillRepoPanelProps, busy: string | null) {
   return html`
     <div style="margin-top: 12px;">
       <label class="field">
         <span>GitHub org/user</span>
         <input
           type="text"
+          name="repo-org"
           placeholder="my-org"
           autocomplete="off"
-          @input=${(e: Event) => {
-            orgValue = (e.target as HTMLInputElement).value;
-          }}
         />
       </label>
       <label class="field" style="margin-top: 8px;">
         <span>Repo name</span>
         <input
           type="text"
+          name="repo-name"
           placeholder="my-skills"
           autocomplete="off"
-          @input=${(e: Event) => {
-            repoValue = (e.target as HTMLInputElement).value;
-          }}
         />
       </label>
       <button
         class="btn primary"
         style="margin-top: 12px;"
         ?disabled=${busy === "init"}
-        @click=${() => props.onInit(orgValue, repoValue, true)}
+        @click=${(e: Event) => {
+          const org = readInputValue(e.currentTarget as HTMLElement, "repo-org");
+          const repoName = readInputValue(e.currentTarget as HTMLElement, "repo-name");
+          if (org && repoName) {
+            props.onInit(org, repoName, true);
+          }
+        }}
       >
         ${busy === "init" ? "Creating…" : "Create Private Repo"}
       </button>

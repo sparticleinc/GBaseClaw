@@ -12,7 +12,7 @@ export type SkillRepoState = {
   repoLoading: boolean;
   repoStatus: SkillRepoStatus | null;
   repoError: string | null;
-  repoBusy: "init" | "push" | "pull" | "tag" | null;
+  repoBusy: string | null;
   repoMessage: SkillRepoMessage | null;
 };
 
@@ -104,6 +104,32 @@ export async function pullSkills(state: SkillRepoState) {
     const message = getErrorMessage(err);
     state.repoError = message;
     state.repoMessage = { kind: "error", message };
+  } finally {
+    state.repoBusy = null;
+  }
+}
+
+export async function saveRepoToken(state: SkillRepoState, token: string) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  state.repoBusy = "auth";
+  state.repoError = null;
+  state.repoMessage = null;
+  try {
+    const result = await state.client.request<{ valid?: boolean; message?: string }>(
+      "skills.repo.auth",
+      { token },
+    );
+    state.repoMessage = {
+      kind: result?.valid ? "success" : "error",
+      message: result?.message ?? "Token saved",
+    };
+    await loadRepoStatus(state);
+  } catch (err) {
+    const msg = getErrorMessage(err);
+    state.repoError = msg;
+    state.repoMessage = { kind: "error", message: msg };
   } finally {
     state.repoBusy = null;
   }

@@ -75,6 +75,7 @@ import {
   loadRepoStatus,
   pullSkills,
   pushSkills,
+  saveRepoToken,
   tagRelease,
 } from "./controllers/skill-repo.ts";
 import {
@@ -1283,6 +1284,7 @@ export function renderApp(state: AppViewState) {
                     onPush: (msg) => pushSkills(state, msg),
                     onPull: () => pullSkills(state),
                     onTag: (tag, msg) => tagRelease(state, tag, msg),
+                    onSaveToken: (token) => saveRepoToken(state, token),
                   },
                   onFilterChange: (next) => (state.skillsFilter = next),
                   onRefresh: () => loadSkills(state, { clearMessages: true }),
