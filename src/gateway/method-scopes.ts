@@ -135,6 +135,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "skills.repo.push",
     "skills.repo.pull",
     "skills.repo.tag",
+    "skills.repo.auth",
   ],
 };
 

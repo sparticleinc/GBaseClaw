@@ -71,6 +71,14 @@ import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { deleteSessionAndRefresh, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
+  initRepo,
+  loadRepoStatus,
+  pullSkills,
+  pushSkills,
+  saveRepoToken,
+  tagRelease,
+} from "./controllers/skill-repo.ts";
+import {
   installSkill,
   loadSkills,
   saveSkillApiKey,
@@ -551,22 +559,30 @@ export function renderApp(state: AppViewState) {
               </nav>
             </div>
             <div class="sidebar-shell__footer">
-              ${state.gbaseClawBotId && !navCollapsed
-                ? (() => {
-                    const username = window.location.pathname.split("/openclaw-user/")[1]?.split("/")[0] ?? "";
-                    const sshPort = new URLSearchParams(window.location.search).get("sshPort") ?? "";
-                    const sshHost = "192.168.50.74";
-                    const sshCmd = sshPort
-                      ? `ssh ${username}@${sshHost} -p ${sshPort}`
-                      : `ssh ${username}@${sshHost}`;
-                    const password = `openclaw-${username}`;
-                    const copyText = (text: string, btnClass: string, label: string) => {
-                      navigator.clipboard.writeText(text).then(() => {
-                        const btn = document.querySelector(`.${btnClass}`) as HTMLElement;
-                        if (btn) { btn.textContent = "\u2713"; setTimeout(() => { btn.textContent = label; }, 1500); }
-                      });
-                    };
-                    return html`
+              ${
+                state.gbaseClawBotId && !navCollapsed
+                  ? (() => {
+                      const username =
+                        window.location.pathname.split("/openclaw-user/")[1]?.split("/")[0] ?? "";
+                      const sshPort =
+                        new URLSearchParams(window.location.search).get("sshPort") ?? "";
+                      const sshHost = "192.168.50.74";
+                      const sshCmd = sshPort
+                        ? `ssh ${username}@${sshHost} -p ${sshPort}`
+                        : `ssh ${username}@${sshHost}`;
+                      const password = `openclaw-${username}`;
+                      const copyText = (text: string, btnClass: string, label: string) => {
+                        void navigator.clipboard.writeText(text).then(() => {
+                          const btn = document.querySelector(`.${btnClass}`) as HTMLElement;
+                          if (btn) {
+                            btn.textContent = "\u2713";
+                            setTimeout(() => {
+                              btn.textContent = label;
+                            }, 1500);
+                          }
+                        });
+                      };
+                      return html`
                       <div style="padding:6px 10px;margin:0 8px 6px;font-size:11px;">
                         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
                           <code style="flex:1;font-size:10px;color:var(--claw-text-2,#aaa);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title=${sshCmd}>${sshCmd}</code>
@@ -575,15 +591,24 @@ export function renderApp(state: AppViewState) {
                         <div style="display:flex;align-items:center;gap:6px;">
                           <code class="gbaseclaw-pw-display" style="flex:1;font-size:10px;color:var(--claw-text-3,#888);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022</code>
                           <button style="padding:2px 6px;background:none;border:none;font-size:10px;cursor:pointer;color:var(--claw-text-3,#888);" title="Toggle password" @click=${() => {
-                            const el = document.querySelector(".gbaseclaw-pw-display") as HTMLElement;
-                            if (el) { el.textContent = el.textContent === "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" ? password : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"; }
+                            const el = document.querySelector(
+                              ".gbaseclaw-pw-display",
+                            ) as HTMLElement;
+                            if (el) {
+                              el.textContent =
+                                el.textContent ===
+                                "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                                  ? password
+                                  : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+                            }
                           }}>\ud83d\udc41</button>
                           <button class="gbaseclaw-ssh-pw" style="padding:2px 8px;background:#555;color:white;border:none;border-radius:3px;font-size:10px;cursor:pointer;white-space:nowrap;" @click=${() => copyText(password, "gbaseclaw-ssh-pw", "PW")}>PW</button>
                         </div>
                       </div>
                     `;
-                  })()
-                : nothing}
+                    })()
+                  : nothing
+              }
               <div class="sidebar-utility-group">
                 <a
                   class="nav-item nav-item--external sidebar-utility-link"
@@ -1298,6 +1323,19 @@ export function renderApp(state: AppViewState) {
                   edits: state.skillEdits,
                   messages: state.skillMessages,
                   busyKey: state.skillsBusyKey,
+                  repo: {
+                    connected: state.connected,
+                    loading: state.repoLoading ?? false,
+                    status: state.repoStatus ?? null,
+                    busy: state.repoBusy ?? null,
+                    message: state.repoMessage ?? null,
+                    onRefresh: () => loadRepoStatus(state),
+                    onInit: (org, name, priv) => initRepo(state, org, name, priv),
+                    onPush: (msg?: string) => pushSkills(state, msg),
+                    onPull: () => pullSkills(state),
+                    onTag: (tag: string, msg?: string) => tagRelease(state, tag, msg),
+                    onSaveToken: (token: string) => saveRepoToken(state, token),
+                  },
                   onFilterChange: (next) => (state.skillsFilter = next),
                   onRefresh: () => loadSkills(state, { clearMessages: true }),
                   onToggle: (key, enabled) => updateSkillEnabled(state, key, enabled),

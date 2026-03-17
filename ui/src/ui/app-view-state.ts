@@ -29,6 +29,7 @@ import type {
   CostUsageSummary,
   SessionUsageTimeSeries,
   SessionsListResult,
+  SkillRepoStatus,
   SkillStatusReport,
   StatusSummary,
   ToolsCatalogResult,
@@ -270,6 +271,11 @@ export type AppViewState = {
     skillEdits: Record<string, string>;
     skillMessages: Record<string, SkillMessage>;
     skillsBusyKey: string | null;
+    repoLoading: boolean;
+    repoStatus: SkillRepoStatus | null;
+    repoError: string | null;
+    repoBusy: string | null;
+    repoMessage: { kind: "success" | "error"; message: string } | null;
     healthLoading: boolean;
     healthResult: HealthSummary | null;
     healthError: string | null;

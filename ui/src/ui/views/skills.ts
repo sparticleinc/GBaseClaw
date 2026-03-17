@@ -2,6 +2,7 @@ import { html, nothing } from "lit";
 import type { SkillMessageMap } from "../controllers/skills.ts";
 import { clampText } from "../format.ts";
 import type { SkillStatusEntry, SkillStatusReport } from "../types.ts";
+import { renderSkillRepoPanel, type SkillRepoPanelProps } from "./skill-repo-panel.ts";
 import { groupSkills } from "./skills-grouping.ts";
 import {
   computeSkillMissing,
@@ -18,6 +19,7 @@ export type SkillsProps = {
   edits: Record<string, string>;
   busyKey: string | null;
   messages: SkillMessageMap;
+  repo: SkillRepoPanelProps;
   onFilterChange: (next: string) => void;
   onRefresh: () => void;
   onToggle: (skillKey: string, enabled: boolean) => void;
@@ -49,13 +51,7 @@ export function renderSkills(props: SkillsProps) {
       </div>
 
       <div class="filters" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px;">
-        <a
-          class="btn"
-          href="https://clawhub.com"
-          target="_blank"
-          rel="noreferrer"
-          title="Browse skills on ClawHub"
-        >Browse Skills Store</a>
+        ${renderSkillRepoPanel(props.repo)}
         <label class="field" style="flex: 1; min-width: 180px;">
           <input
             .value=${props.filter}

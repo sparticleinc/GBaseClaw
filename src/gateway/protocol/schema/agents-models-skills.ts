@@ -238,6 +238,13 @@ export const SkillRepoTagParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const SkillRepoAuthParamsSchema = Type.Object(
+  {
+    token: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 export const ToolsCatalogParamsSchema = Type.Object(
   {
     agentId: Type.Optional(NonEmptyString),
