@@ -570,6 +570,23 @@ export function renderApp(state: AppViewState) {
                       const sshCmd = sshPort
                         ? `ssh ${username}@${sshHost} -p ${sshPort}`
                         : `ssh ${username}@${sshHost}`;
+                      // Auto-fetch sshPort from provisioner if not in URL
+                      if (!sshPort && username) {
+                        void fetch(`/sandbox-status/${username}`)
+                          .then((r) => r.json())
+                          .then((d: { sshPort?: string }) => {
+                            if (d.sshPort) {
+                              const url = new URL(window.location.href);
+                              url.searchParams.set("sshPort", d.sshPort);
+                              window.history.replaceState({}, "", url.toString());
+                              const cmdEl = document.querySelector(".gbaseclaw-ssh-cmd-text");
+                              if (cmdEl) {
+                                cmdEl.textContent = `ssh ${username}@${sshHost} -p ${d.sshPort}`;
+                              }
+                            }
+                          })
+                          .catch(() => {});
+                      }
                       const password = `openclaw-${username}`;
                       const copyText = (text: string, btnClass: string, label: string) => {
                         void navigator.clipboard.writeText(text).then(() => {
@@ -585,7 +602,7 @@ export function renderApp(state: AppViewState) {
                       return html`
                       <div style="padding:6px 10px;margin:0 8px 6px;font-size:11px;">
                         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                          <code style="flex:1;font-size:10px;color:var(--claw-text-2,#aaa);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title=${sshCmd}>${sshCmd}</code>
+                          <code class="gbaseclaw-ssh-cmd-text" style="flex:1;font-size:10px;color:var(--claw-text-2,#aaa);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title=${sshCmd}>${sshCmd}</code>
                           <button class="gbaseclaw-ssh-cmd" style="padding:2px 8px;background:#7C68FB;color:white;border:none;border-radius:3px;font-size:10px;cursor:pointer;white-space:nowrap;" @click=${() => copyText(sshCmd, "gbaseclaw-ssh-cmd", "SSH")}>SSH</button>
                         </div>
                         <div style="display:flex;align-items:center;gap:6px;">

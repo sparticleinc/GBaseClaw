@@ -279,6 +279,7 @@ services:
       - backend
       - frontend
       - openclaw-gateway
+      - sandbox-provisioner
 
 volumes:
   pg_data:
