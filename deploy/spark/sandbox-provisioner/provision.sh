@@ -15,7 +15,7 @@ ENV_FILE="$DEPLOY_DIR/.env.openclaw-${USERNAME}"
 # Skip if already exists
 if [ -f "$COMPOSE_FILE" ]; then
     # Container might be stopped; ensure it's running
-    docker compose -p spark -f "$DEPLOY_DIR/docker-compose.yml" -f "$COMPOSE_FILE" \
+    docker compose -f "$DEPLOY_DIR/docker-compose.yml" -f "$COMPOSE_FILE" \
         up -d "openclaw-${USERNAME}" 2>&1
     echo "already_exists"
     exit 0
@@ -117,7 +117,7 @@ docker compose -f "$DEPLOY_DIR/docker-compose.yml" -f "$COMPOSE_FILE" \
     up -d "openclaw-${USERNAME}" 2>&1
 
 # Wait for gateway to start
-CONTAINER_NAME="spark-openclaw-${USERNAME}-1"
+CONTAINER_NAME="deploy-openclaw-${USERNAME}-1"
 for i in $(seq 1 15); do
     if docker exec "$CONTAINER_NAME" test -f /root/.openclaw/openclaw.json 2>/dev/null; then
         sleep 2
