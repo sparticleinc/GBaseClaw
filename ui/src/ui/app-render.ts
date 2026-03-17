@@ -578,11 +578,8 @@ export function renderApp(state: AppViewState) {
                             if (d.sshPort) {
                               const url = new URL(window.location.href);
                               url.searchParams.set("sshPort", d.sshPort);
-                              window.history.replaceState({}, "", url.toString());
-                              const cmdEl = document.querySelector(".gbaseclaw-ssh-cmd-text");
-                              if (cmdEl) {
-                                cmdEl.textContent = `ssh ${username}@${sshHost} -p ${d.sshPort}`;
-                              }
+                              // Replace URL and reload so Lit picks up the new param
+                              window.location.replace(url.toString());
                             }
                           })
                           .catch(() => {});
