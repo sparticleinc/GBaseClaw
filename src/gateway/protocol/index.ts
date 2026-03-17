@@ -218,7 +218,6 @@ import {
   SkillRepoPushParamsSchema,
   SkillRepoPullParamsSchema,
   SkillRepoTagParamsSchema,
-  SkillRepoAuthParamsSchema,
   type ToolsCatalogParams,
   ToolsCatalogParamsSchema,
   type ToolsCatalogResult,
@@ -378,7 +377,6 @@ export const validateSkillRepoInitParams = ajv.compile(SkillRepoInitParamsSchema
 export const validateSkillRepoPushParams = ajv.compile(SkillRepoPushParamsSchema);
 export const validateSkillRepoPullParams = ajv.compile(SkillRepoPullParamsSchema);
 export const validateSkillRepoTagParams = ajv.compile(SkillRepoTagParamsSchema);
-export const validateSkillRepoAuthParams = ajv.compile(SkillRepoAuthParamsSchema);
 export const validateCronListParams = ajv.compile<CronListParams>(CronListParamsSchema);
 export const validateCronStatusParams = ajv.compile<CronStatusParams>(CronStatusParamsSchema);
 export const validateCronAddParams = ajv.compile<CronAddParams>(CronAddParamsSchema);
@@ -558,7 +556,6 @@ export {
   SkillRepoPushParamsSchema,
   SkillRepoPullParamsSchema,
   SkillRepoTagParamsSchema,
-  SkillRepoAuthParamsSchema,
   CronJobSchema,
   CronListParamsSchema,
   CronStatusParamsSchema,

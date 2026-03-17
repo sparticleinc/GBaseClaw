@@ -26,10 +26,7 @@ export const TAB_GROUPS = [
 /**
  * GBaseClaw 模式下的精简导航：只保留 Chat 和 Skills
  */
-export const GBASECLAW_TAB_GROUPS = [
-  { label: "chat", tabs: ["chat"] },
-  { label: "agent", tabs: ["skills"] },
-] as const;
+export const GBASECLAW_TAB_GROUPS = TAB_GROUPS;
 
 export type Tab =
   | "agents"

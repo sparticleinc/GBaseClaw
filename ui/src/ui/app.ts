@@ -407,12 +407,6 @@ export class OpenClawApp extends LitElement {
   @state() skillsBusyKey: string | null = null;
   @state() skillMessages: Record<string, SkillMessage> = {};
 
-  @state() repoLoading = false;
-  @state() repoStatus: import("./types.ts").SkillRepoStatus | null = null;
-  @state() repoError: string | null = null;
-  @state() repoBusy: string | null = null;
-  @state() repoMessage: { kind: "success" | "error"; message: string } | null = null;
-
   @state() healthLoading = false;
   @state() healthResult: HealthSummary | null = null;
   @state() healthError: string | null = null;

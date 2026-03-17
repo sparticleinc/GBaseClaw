@@ -1,12 +1,10 @@
 import { writeFile } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { runCommandWithTimeout } from "../../process/exec.js";
-import { normalizeSecretInput } from "../../utils/normalize-secret-input.js";
 import {
   ErrorCodes,
   errorShape,
@@ -16,7 +14,6 @@ import {
   validateSkillRepoPushParams,
   validateSkillRepoPullParams,
   validateSkillRepoTagParams,
-  validateSkillRepoAuthParams,
 } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
 
@@ -27,25 +24,11 @@ function resolveRepoDir(cfg: OpenClawConfig): string {
   return path.resolve(workspaceDir, "custom-skills");
 }
 
-// Resolve GH_TOKEN from config or environment
-function resolveGhToken(cfg: OpenClawConfig): string | undefined {
-  const configToken = (cfg.skills as Record<string, unknown> | undefined)?.repoGhToken;
-  if (typeof configToken === "string" && configToken.trim()) {
-    return configToken.trim();
-  }
-  return process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? undefined;
-}
-
 async function git(
   args: string[],
   cwd: string,
-  env?: Record<string, string>,
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-  const result = await runCommandWithTimeout(["git", ...args], {
-    cwd,
-    timeoutMs: CMD_TIMEOUT_MS,
-    env,
-  });
+  const result = await runCommandWithTimeout(["git", ...args], { cwd, timeoutMs: CMD_TIMEOUT_MS });
   return {
     ok: result.code === 0,
     stdout: result.stdout.trim(),
@@ -56,27 +39,13 @@ async function git(
 async function gh(
   args: string[],
   cwd: string,
-  env?: Record<string, string>,
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-  const result = await runCommandWithTimeout(["gh", ...args], {
-    cwd,
-    timeoutMs: CMD_TIMEOUT_MS,
-    env,
-  });
+  const result = await runCommandWithTimeout(["gh", ...args], { cwd, timeoutMs: CMD_TIMEOUT_MS });
   return {
     ok: result.code === 0,
     stdout: result.stdout.trim(),
     stderr: result.stderr.trim(),
   };
-}
-
-// Build env object with GH_TOKEN injected if available
-function buildGhEnv(cfg: OpenClawConfig): Record<string, string> | undefined {
-  const token = resolveGhToken(cfg);
-  if (!token) {
-    return undefined;
-  }
-  return { ...process.env, GH_TOKEN: token } as Record<string, string>;
 }
 
 export const skillRepoHandlers: GatewayRequestHandlers = {
@@ -95,19 +64,15 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
 
     const cfg = loadConfig();
     const repoDir = resolveRepoDir(cfg);
-    const ghEnv = buildGhEnv(cfg);
 
-    // Check gh auth status (use home dir as cwd since repoDir may not exist yet)
+    // Check gh auth status
     let ghAuth = false;
     try {
-      const authResult = await gh(["auth", "status"], os.homedir(), ghEnv);
+      const authResult = await gh(["auth", "status"], repoDir);
       ghAuth = authResult.ok;
     } catch {
       ghAuth = false;
     }
-
-    // Check if a token is configured (even if gh auth status fails)
-    const hasToken = !!resolveGhToken(cfg);
 
     // Check if git repo is initialized
     let initialized = false;
@@ -119,7 +84,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
     }
 
     if (!initialized) {
-      respond(true, { initialized, dirty: false, ghAuth: ghAuth || hasToken, repoDir }, undefined);
+      respond(true, { initialized, dirty: false, ghAuth, repoDir }, undefined);
       return;
     }
 
@@ -141,6 +106,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
       const remoteResult = await git(["remote", "get-url", "origin"], repoDir);
       if (remoteResult.ok && remoteResult.stdout) {
         remote = remoteResult.stdout;
+        // Extract repo name from URL like git@github.com:org/repo.git or https://github.com/org/repo.git
         const match = remote.match(/\/([^/]+?)(?:\.git)?$/);
         if (match) {
           repoName = match[1];
@@ -183,72 +149,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
 
     respond(
       true,
-      {
-        initialized,
-        remote,
-        branch,
-        repoName,
-        dirty,
-        lastCommit,
-        lastTag,
-        ghAuth: ghAuth || hasToken,
-        repoDir,
-      },
-      undefined,
-    );
-  },
-
-  "skills.repo.auth": async ({ params, respond }) => {
-    if (!validateSkillRepoAuthParams(params)) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `invalid skills.repo.auth params: ${formatValidationErrors(validateSkillRepoAuthParams.errors)}`,
-        ),
-      );
-      return;
-    }
-
-    const p = params as { token: string };
-    const token = normalizeSecretInput(p.token);
-
-    const cfg = loadConfig();
-    const skills = cfg.skills ? { ...cfg.skills } : {};
-
-    if (token) {
-      (skills as Record<string, unknown>).repoGhToken = token;
-    } else {
-      delete (skills as Record<string, unknown>).repoGhToken;
-    }
-
-    const nextConfig: OpenClawConfig = { ...cfg, skills };
-    await writeConfigFile(nextConfig);
-
-    // Verify the token works
-    let valid = false;
-    if (token) {
-      try {
-        const env = { ...process.env, GH_TOKEN: token } as Record<string, string>;
-        const result = await gh(["auth", "status"], os.homedir(), env);
-        valid = result.ok;
-      } catch {
-        valid = false;
-      }
-    }
-
-    respond(
-      true,
-      {
-        ok: true,
-        valid,
-        message: token
-          ? valid
-            ? "Token saved and verified"
-            : "Token saved but verification failed"
-          : "Token removed",
-      },
+      { initialized, remote, branch, repoName, dirty, lastCommit, lastTag, ghAuth, repoDir },
       undefined,
     );
   },
@@ -269,14 +170,15 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
     const p = params as { org: string; repoName: string; isPrivate?: boolean };
     const cfg = loadConfig();
     const repoDir = resolveRepoDir(cfg);
-    const ghEnv = buildGhEnv(cfg);
     const visibility = p.isPrivate === false ? "--public" : "--private";
     const fullName = `${p.org}/${p.repoName}`;
 
     try {
+      // Create the directory
       await mkdir(repoDir, { recursive: true });
 
-      const createResult = await gh(["repo", "create", fullName, visibility], repoDir, ghEnv);
+      // Create the GitHub repo
+      const createResult = await gh(["repo", "create", fullName, visibility], repoDir);
       if (!createResult.ok) {
         respond(
           false,
@@ -286,6 +188,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      // Initialize git
       const initResult = await git(["init"], repoDir);
       if (!initResult.ok) {
         respond(
@@ -296,6 +199,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      // Add remote
       const remoteUrl = `https://github.com/${fullName}.git`;
       const addRemoteResult = await git(["remote", "add", "origin", remoteUrl], repoDir);
       if (!addRemoteResult.ok) {
@@ -307,18 +211,14 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      // Create README.md
       const readmeContent = `# ${p.repoName}\n\nCustom skills repository.\n`;
       await writeFile(path.join(repoDir, "README.md"), readmeContent, "utf-8");
 
+      // Initial commit and push
       await git(["add", "."], repoDir);
       await git(["commit", "-m", "Initial commit"], repoDir);
-
-      // Push with token-authenticated URL
-      const token = resolveGhToken(cfg);
-      const pushEnv = token
-        ? ({ ...process.env, GH_TOKEN: token } as Record<string, string>)
-        : ghEnv;
-      const pushResult = await git(["push", "-u", "origin", "HEAD"], repoDir, pushEnv);
+      const pushResult = await git(["push", "-u", "origin", "HEAD"], repoDir);
       if (!pushResult.ok) {
         respond(
           false,
@@ -329,8 +229,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
       }
 
       // Auto-register repoDir in skills.load.extraDirs config
-      const updatedCfg = loadConfig();
-      const skills = updatedCfg.skills ? { ...updatedCfg.skills } : {};
+      const skills = cfg.skills ? { ...cfg.skills } : {};
       const load = skills.load ? { ...skills.load } : {};
       const extraDirs: string[] = Array.isArray(load.extraDirs) ? [...load.extraDirs] : [];
       if (!extraDirs.includes(repoDir)) {
@@ -338,7 +237,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
       }
       load.extraDirs = extraDirs;
       skills.load = load;
-      const nextConfig: OpenClawConfig = { ...updatedCfg, skills };
+      const nextConfig: OpenClawConfig = { ...cfg, skills };
       await writeConfigFile(nextConfig);
 
       respond(true, { ok: true, repoDir, remote: remoteUrl, repoName: p.repoName }, undefined);
@@ -364,7 +263,6 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
     const p = params as { message?: string };
     const cfg = loadConfig();
     const repoDir = resolveRepoDir(cfg);
-    const ghEnv = buildGhEnv(cfg);
     const commitMessage = p.message || "Update custom skills";
 
     try {
@@ -378,6 +276,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      // Check if there is anything to commit
       const statusResult = await git(["status", "--porcelain"], repoDir);
       if (statusResult.ok && statusResult.stdout.length === 0) {
         respond(true, { ok: true, message: "nothing to commit, working tree clean" }, undefined);
@@ -394,7 +293,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const pushResult = await git(["push"], repoDir, ghEnv);
+      const pushResult = await git(["push"], repoDir);
       if (!pushResult.ok) {
         respond(
           false,
@@ -426,10 +325,9 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
 
     const cfg = loadConfig();
     const repoDir = resolveRepoDir(cfg);
-    const ghEnv = buildGhEnv(cfg);
 
     try {
-      const pullResult = await git(["pull"], repoDir, ghEnv);
+      const pullResult = await git(["pull"], repoDir);
       if (!pullResult.ok) {
         respond(
           false,
@@ -438,6 +336,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
         );
         return;
       }
+
       respond(true, { ok: true, message: pullResult.stdout }, undefined);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -461,7 +360,6 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
     const p = params as { tag: string; message?: string };
     const cfg = loadConfig();
     const repoDir = resolveRepoDir(cfg);
-    const ghEnv = buildGhEnv(cfg);
     const tagMessage = p.message || p.tag;
 
     try {
@@ -475,7 +373,7 @@ export const skillRepoHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const pushResult = await git(["push", "origin", p.tag], repoDir, ghEnv);
+      const pushResult = await git(["push", "origin", p.tag], repoDir);
       if (!pushResult.ok) {
         respond(
           false,

@@ -21,7 +21,6 @@ import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { loadSessions } from "./controllers/sessions.ts";
-import { loadRepoStatus } from "./controllers/skill-repo.ts";
 import { loadSkills } from "./controllers/skills.ts";
 import { loadUsage } from "./controllers/usage.ts";
 import {
@@ -253,7 +252,6 @@ export async function refreshActiveTab(host: SettingsHost) {
   }
   if (host.tab === "skills") {
     await loadSkills(host as unknown as OpenClawApp);
-    await loadRepoStatus(host as unknown as OpenClawApp);
   }
   if (host.tab === "agents") {
     await loadAgents(host as unknown as OpenClawApp);
@@ -478,6 +476,10 @@ export function syncUrlWithTab(host: SettingsHost, tab: Tab, replace: boolean) {
   if (host.gbaseClawBotId) {
     url.searchParams.set("botId", host.gbaseClawBotId);
     url.searchParams.set("session", `gbaseclaw:${host.gbaseClawBotId}`);
+    const currentSshPort = new URLSearchParams(window.location.search).get("sshPort");
+    if (currentSshPort) {
+      url.searchParams.set("sshPort", currentSshPort);
+    }
   }
 
   if (currentPath !== targetPath) {
@@ -514,7 +516,6 @@ export async function loadOverview(host: SettingsHost) {
     loadCronJobs(app),
     loadDebug(app),
     loadSkills(app),
-    loadRepoStatus(app),
     loadUsage(app),
     loadOverviewLogs(app),
   ]);
