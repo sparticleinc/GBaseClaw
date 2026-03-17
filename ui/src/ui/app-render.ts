@@ -433,7 +433,7 @@ export function renderApp(state: AppViewState) {
               ? html`
                   <a
                     class="topbar-back-link"
-                    href="https://admin.gbase.ai/bots"
+                    href="https://admin-dev.gbase.ai/bots"
                     style="
                       display: flex;
                       align-items: center;

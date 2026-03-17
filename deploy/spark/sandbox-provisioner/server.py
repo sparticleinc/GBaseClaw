@@ -8,6 +8,8 @@ Endpoints:
   GET /provision/{username}?redirect={original_url}
     - Creates sandbox if not exists
     - Returns 302 redirect to original URL
+  GET /status/{username}
+    - Returns sandbox status (exists, sshPort)
   GET /health
     - Returns 200 OK
 """
@@ -27,6 +29,26 @@ PROVISION_SCRIPT = "/app/provision.sh"
 _provisioning = set()
 
 
+def read_ssh_port(username: str) -> str:
+    """Read SSH port from the user's compose file."""
+    compose_file = f"/deploy/docker-compose.openclaw-{username}.yml"
+    try:
+        with open(compose_file) as f:
+            for line in f:
+                if ":22" in line and '"' in line:
+                    port = line.strip().split('"')[1].split(":")[0]
+                    if port.isdigit():
+                        return port
+    except FileNotFoundError:
+        pass
+    return ""
+
+
+def sandbox_exists(username: str) -> bool:
+    """Check if a sandbox compose file exists."""
+    return os.path.exists(f"/deploy/docker-compose.openclaw-{username}.yml")
+
+
 class ProvisionHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stderr.write(f"[provisioner] {fmt % args}\n")
@@ -37,6 +59,19 @@ class ProvisionHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/health":
             self._respond(200, {"ok": True})
+            return
+
+        # /status/{username} — return sandbox info without creating
+        match = re.match(r"^/status/([a-zA-Z0-9_-]+)$", path)
+        if match:
+            username = match.group(1)
+            exists = sandbox_exists(username)
+            ssh_port = read_ssh_port(username) if exists else ""
+            self._respond(200, {
+                "exists": exists,
+                "sshPort": ssh_port,
+                "username": username,
+            })
             return
 
         # /provision/{username}
@@ -52,7 +87,6 @@ class ProvisionHandler(http.server.BaseHTTPRequestHandler):
         # Prevent concurrent provisioning
         if username in _provisioning:
             self.log_message("Already provisioning: %s, waiting...", username)
-            # Return a retry-after page
             self._respond_html(
                 503,
                 f"""<html><head>
@@ -85,25 +119,14 @@ class ProvisionHandler(http.server.BaseHTTPRequestHandler):
             output = result.stdout.strip().split("\n")[-1]
             self.log_message("Provision result: %s", output)
 
-            # Extract SSH port from output (format: "created:PORT" or "already_exists")
+            # Extract SSH port
             ssh_port = ""
             if output.startswith("created:"):
                 ssh_port = output.split(":")[1]
             elif output == "already_exists":
-                # Read port from existing compose file
-                import glob
-                compose_files = glob.glob(f"/deploy/docker-compose.openclaw-{username}.yml")
-                for cf in compose_files:
-                    with open(cf) as f:
-                        for line in f:
-                            if ":22" in line and '"' in line:
-                                port = line.strip().split('"')[1].split(":")[0]
-                                if port.isdigit():
-                                    ssh_port = port
-                                    break
+                ssh_port = read_ssh_port(username)
 
             if redirect_url:
-                # Append sshPort to redirect URL
                 final_url = redirect_url
                 if ssh_port:
                     sep = "&" if "?" in final_url else "?"
@@ -113,7 +136,7 @@ class ProvisionHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
             else:
-                self._respond(200, {"ok": True, "result": output})
+                self._respond(200, {"ok": True, "result": output, "sshPort": ssh_port})
 
         except subprocess.TimeoutExpired:
             self._respond(504, {"error": "provision timeout"})
@@ -127,6 +150,7 @@ class ProvisionHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 
