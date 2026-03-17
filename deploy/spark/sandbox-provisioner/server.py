@@ -85,10 +85,31 @@ class ProvisionHandler(http.server.BaseHTTPRequestHandler):
             output = result.stdout.strip().split("\n")[-1]
             self.log_message("Provision result: %s", output)
 
+            # Extract SSH port from output (format: "created:PORT" or "already_exists")
+            ssh_port = ""
+            if output.startswith("created:"):
+                ssh_port = output.split(":")[1]
+            elif output == "already_exists":
+                # Read port from existing compose file
+                import glob
+                compose_files = glob.glob(f"/deploy/docker-compose.openclaw-{username}.yml")
+                for cf in compose_files:
+                    with open(cf) as f:
+                        for line in f:
+                            if ":22" in line and '"' in line:
+                                port = line.strip().split('"')[1].split(":")[0]
+                                if port.isdigit():
+                                    ssh_port = port
+                                    break
+
             if redirect_url:
-                # Redirect back to original URL
+                # Append sshPort to redirect URL
+                final_url = redirect_url
+                if ssh_port:
+                    sep = "&" if "?" in final_url else "?"
+                    final_url = f"{final_url}{sep}sshPort={ssh_port}"
                 self.send_response(302)
-                self.send_header("Location", redirect_url)
+                self.send_header("Location", final_url)
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
             else:
