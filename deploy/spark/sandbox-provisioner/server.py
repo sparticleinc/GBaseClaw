@@ -82,7 +82,15 @@ class ProvisionHandler(http.server.BaseHTTPRequestHandler):
 
         username = match.group(1)
         params = urllib.parse.parse_qs(parsed.query)
-        redirect_url = params.get("redirect", [""])[0]
+        # Prefer redirect URL from headers (set by nginx @provision_sandbox)
+        # Falls back to query param for direct /sandbox-provision/ calls
+        original_uri = self.headers.get("X-Original-URI", "")
+        original_proto = self.headers.get("X-Original-Proto", "https")
+        host = self.headers.get("Host", "")
+        if original_uri and host:
+            redirect_url = f"{original_proto}://{host}{original_uri}"
+        else:
+            redirect_url = params.get("redirect", [""])[0]
 
         # Prevent concurrent provisioning
         if username in _provisioning:

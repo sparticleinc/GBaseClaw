@@ -11,12 +11,26 @@ USERNAME="${1:?Usage: provision.sh <username>}"
 DEPLOY_DIR="/deploy"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.openclaw-${USERNAME}.yml"
 ENV_FILE="$DEPLOY_DIR/.env.openclaw-${USERNAME}"
+CONTAINER_NAME="deploy-openclaw-${USERNAME}-1"
+
+# Wait for the sandbox gateway to be reachable via HTTP
+wait_for_gateway() {
+    for i in $(seq 1 30); do
+        if docker exec "$CONTAINER_NAME" curl -sf http://localhost:18789/healthz >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
 
 # Skip if already exists
 if [ -f "$COMPOSE_FILE" ]; then
     # Container might be stopped; ensure it's running
     docker compose -f "$DEPLOY_DIR/docker-compose.yml" -f "$COMPOSE_FILE" \
         up -d "openclaw-${USERNAME}" 2>&1
+    # Wait for gateway to be ready before returning
+    wait_for_gateway
     echo "already_exists"
     exit 0
 fi
@@ -116,16 +130,15 @@ EOF
 docker compose -f "$DEPLOY_DIR/docker-compose.yml" -f "$COMPOSE_FILE" \
     up -d "openclaw-${USERNAME}" 2>&1
 
-# Wait for gateway to start
-CONTAINER_NAME="deploy-openclaw-${USERNAME}-1"
-for i in $(seq 1 15); do
-    if docker exec "$CONTAINER_NAME" test -f /root/.openclaw/openclaw.json 2>/dev/null; then
-        sleep 2
-        # Auto-approve pairing
-        docker exec spark-openclaw-gateway-1 \
-            node /app/openclaw.mjs devices approve --latest 2>&1 || true
-        # Upgrade scopes
-        docker exec spark-openclaw-gateway-1 node -e "
+# Wait for gateway HTTP to be ready
+wait_for_gateway
+
+# Auto-approve pairing with central gateway
+docker exec spark-openclaw-gateway-1 \
+    node /app/openclaw.mjs devices approve --latest 2>&1 || true
+
+# Upgrade scopes to full operator permissions
+docker exec spark-openclaw-gateway-1 node -e "
 const fs=require('fs');
 const f='/root/.openclaw/devices/paired.json';
 const d=JSON.parse(fs.readFileSync(f,'utf8'));
@@ -140,9 +153,5 @@ for(const v of Object.values(d)){
 }
 fs.writeFileSync(f,JSON.stringify(d,null,2));
 " 2>&1 || true
-        break
-    fi
-    sleep 2
-done
 
 echo "created:${SSH_PORT}"
