@@ -23,6 +23,7 @@ import { nodeHandlers } from "./server-methods/nodes.js";
 import { pushHandlers } from "./server-methods/push.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
+import { skillRepoHandlers } from "./server-methods/skill-repo.js";
 import { skillsHandlers } from "./server-methods/skills.js";
 import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
@@ -84,6 +85,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...toolsCatalogHandlers,
   ...ttsHandlers,
   ...skillsHandlers,
+  ...skillRepoHandlers,
   ...sessionsHandlers,
   ...systemHandlers,
   ...updateHandlers,

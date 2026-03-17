@@ -194,6 +194,11 @@ export class OpenClawApp extends LitElement {
   @state() pendingGatewayUrl: string | null = null;
   pendingGatewayToken: string | null = null;
 
+  /** GBaseClaw mode: bot ID from URL or redeemed from ticket */
+  @state() gbaseClawBotId: string | null = null;
+  /** GBaseClaw mode: one-time ticket */
+  @state() gbaseClawTicket: string | null = null;
+
   @state() configLoading = false;
   @state() configRaw = "{\n}\n";
   @state() configRawOriginal = "";

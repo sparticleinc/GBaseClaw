@@ -607,6 +607,18 @@ export type SkillStatusReport = {
   skills: SkillStatusEntry[];
 };
 
+export type SkillRepoStatus = {
+  initialized: boolean;
+  remote?: string;
+  branch?: string;
+  repoName?: string;
+  dirty: boolean;
+  lastCommit?: string;
+  lastTag?: string;
+  ghAuth: boolean;
+  repoDir: string;
+};
+
 export type StatusSummary = Record<string, unknown>;
 
 export type HealthSnapshot = Record<string, unknown>;

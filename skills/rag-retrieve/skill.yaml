@@ -1,0 +1,26 @@
+name: rag-retrieve
+version: 1.0.0
+description: RAG retrieval skill for querying and retrieving relevant documents from knowledge base using vector search
+author:
+  name: sparticle
+  email: support@gbase.ai
+license: MIT
+tags:
+  - rag
+  - retrieval
+  - vector-search
+  - knowledge-base
+runtime:
+  python: ">=3.7"
+  dependencies:
+    - requests
+entry_point: scripts/rag_retrieve.py
+config:
+  query:
+    type: string
+    required: true
+    description: Search query content
+  top_k:
+    type: integer
+    default: 100
+    description: Maximum number of results

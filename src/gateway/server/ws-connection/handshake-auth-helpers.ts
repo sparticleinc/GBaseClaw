@@ -53,6 +53,10 @@ export function shouldAllowSilentLocalPairing(params: {
   isWebchat: boolean;
   reason: "not-paired" | "role-upgrade" | "scope-upgrade" | "metadata-upgrade";
 }): boolean {
+  // GBaseClaw: auto-approve all pairing when GBASECLAW_SKIP_PAIRING=true
+  if (process.env.GBASECLAW_SKIP_PAIRING === "true") {
+    return true;
+  }
   return (
     params.isLocalClient &&
     (!params.hasBrowserOriginHeader || params.isControlUi || params.isWebchat) &&

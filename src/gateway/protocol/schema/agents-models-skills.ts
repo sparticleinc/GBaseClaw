@@ -208,6 +208,36 @@ export const SkillsUpdateParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// -- Skill Repo schemas --
+
+export const SkillRepoStatusParamsSchema = Type.Object({}, { additionalProperties: false });
+
+export const SkillRepoInitParamsSchema = Type.Object(
+  {
+    org: NonEmptyString,
+    repoName: NonEmptyString,
+    isPrivate: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
+export const SkillRepoPushParamsSchema = Type.Object(
+  {
+    message: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export const SkillRepoPullParamsSchema = Type.Object({}, { additionalProperties: false });
+
+export const SkillRepoTagParamsSchema = Type.Object(
+  {
+    tag: NonEmptyString,
+    message: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
 export const ToolsCatalogParamsSchema = Type.Object(
   {
     agentId: Type.Optional(NonEmptyString),

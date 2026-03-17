@@ -24,6 +24,9 @@ export default defineConfig(() => {
   return {
     base,
     publicDir: path.resolve(here, "public"),
+    define: {
+      "process.env.VITEST": "undefined",
+    },
     optimizeDeps: {
       include: ["lit/directives/repeat.js"],
     },
@@ -36,8 +39,9 @@ export default defineConfig(() => {
     },
     server: {
       host: true,
-      port: 5173,
-      strictPort: true,
+      port: 3000,
+      strictPort: false,
+      allowedHosts: ["claw-spark.gbase.ai", "localhost"],
     },
     plugins: [
       {

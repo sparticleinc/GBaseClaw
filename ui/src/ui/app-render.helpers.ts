@@ -27,6 +27,10 @@ type SessionDefaultsSnapshot = {
 };
 
 function resolveSidebarChatSessionKey(state: AppViewState): string {
+  // GBaseClaw mode: lock session to botId
+  if (state.gbaseClawBotId) {
+    return `gbaseclaw:${state.gbaseClawBotId}`;
+  }
   const snapshot = state.hello?.snapshot as
     | { sessionDefaults?: SessionDefaultsSnapshot }
     | undefined;

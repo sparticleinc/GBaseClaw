@@ -300,6 +300,10 @@ export type AppViewState = {
     paletteOpen: boolean;
     paletteQuery: string;
     paletteActiveIndex: number;
+    /** GBaseClaw mode: bot ID from URL or redeemed from ticket */
+    gbaseClawBotId: string | null;
+    /** GBaseClaw mode: one-time ticket */
+    gbaseClawTicket: string | null;
     streamMode: boolean;
     overviewShowGatewayToken: boolean;
     overviewShowGatewayPassword: boolean;

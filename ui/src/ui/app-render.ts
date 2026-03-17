@@ -71,6 +71,13 @@ import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { deleteSessionAndRefresh, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
+  initRepo,
+  loadRepoStatus,
+  pullSkills,
+  pushSkills,
+  tagRelease,
+} from "./controllers/skill-repo.ts";
+import {
   installSkill,
   loadSkills,
   saveSkillApiKey,
@@ -80,7 +87,13 @@ import {
 import "./components/dashboard-header.ts";
 import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "./external-link.ts";
 import { icons } from "./icons.ts";
-import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
+import {
+  normalizeBasePath,
+  TAB_GROUPS,
+  GBASECLAW_TAB_GROUPS,
+  subtitleForTab,
+  titleForTab,
+} from "./navigation.ts";
 import { agentLogoUrl } from "./views/agents-utils.ts";
 import {
   resolveAgentConfig,
@@ -414,6 +427,31 @@ export function renderApp(state: AppViewState) {
       ></button>
       <header class="topbar">
         <div class="topnav-shell">
+          ${
+            state.gbaseClawBotId
+              ? html`
+                  <a
+                    class="topbar-back-link"
+                    href="https://admin.gbase.ai/bots"
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 4px;
+                      padding: 4px 12px;
+                      background: #7c68fb;
+                      color: white;
+                      border-radius: 6px;
+                      text-decoration: none;
+                      font-size: 13px;
+                      font-weight: 500;
+                      margin-right: 8px;
+                    "
+                  >
+                    ← GBase
+                  </a>
+                `
+              : nothing
+          }
           <button
             type="button"
             class="topbar-nav-toggle"
@@ -457,10 +495,10 @@ export function renderApp(state: AppViewState) {
                   navCollapsed
                     ? nothing
                     : html`
-                        <img class="sidebar-brand__logo" src="${agentLogoUrl(basePath)}" alt="OpenClaw" />
+                        <img class="sidebar-brand__logo" src="${agentLogoUrl(basePath)}" alt="${state.gbaseClawBotId ? "GBaseClaw" : "OpenClaw"}" />
                         <span class="sidebar-brand__copy">
-                          <span class="sidebar-brand__eyebrow">${t("nav.control")}</span>
-                          <span class="sidebar-brand__title">OpenClaw</span>
+                          <span class="sidebar-brand__eyebrow">${state.gbaseClawBotId ? "GBase" : t("nav.control")}</span>
+                          <span class="sidebar-brand__title">${state.gbaseClawBotId ? "GBaseClaw" : "OpenClaw"}</span>
                         </span>
                       `
                 }
@@ -481,7 +519,7 @@ export function renderApp(state: AppViewState) {
             </div>
             <div class="sidebar-shell__body">
               <nav class="sidebar-nav">
-                ${TAB_GROUPS.map((group) => {
+                ${(state.gbaseClawBotId ? GBASECLAW_TAB_GROUPS : TAB_GROUPS).map((group) => {
                   const isGroupCollapsed = state.settings.navGroupsCollapsed[group.label] ?? false;
                   const hasActiveTab = group.tabs.some((tab) => tab === state.tab);
                   const showItems = navCollapsed || hasActiveTab || !isGroupCollapsed;
@@ -1234,6 +1272,18 @@ export function renderApp(state: AppViewState) {
                   edits: state.skillEdits,
                   messages: state.skillMessages,
                   busyKey: state.skillsBusyKey,
+                  repo: {
+                    connected: state.connected,
+                    loading: state.repoLoading ?? false,
+                    status: state.repoStatus ?? null,
+                    busy: state.repoBusy ?? null,
+                    message: state.repoMessage ?? null,
+                    onRefresh: () => loadRepoStatus(state),
+                    onInit: (org, name, priv) => initRepo(state, org, name, priv),
+                    onPush: (msg) => pushSkills(state, msg),
+                    onPull: () => pullSkills(state),
+                    onTag: (tag, msg) => tagRelease(state, tag, msg),
+                  },
                   onFilterChange: (next) => (state.skillsFilter = next),
                   onRefresh: () => loadSkills(state, { clearMessages: true }),
                   onToggle: (key, enabled) => updateSkillEnabled(state, key, enabled),

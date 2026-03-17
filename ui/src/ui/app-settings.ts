@@ -58,6 +58,10 @@ type SettingsHost = {
   pendingGatewayUrl?: string | null;
   systemThemeCleanup?: (() => void) | null;
   pendingGatewayToken?: string | null;
+  /** GBaseClaw mode: bot ID from URL param */
+  gbaseClawBotId?: string | null;
+  /** GBaseClaw mode: one-time ticket from URL param */
+  gbaseClawTicket?: string | null;
 };
 
 export function applySettings(host: SettingsHost, next: UiSettings) {
@@ -146,6 +150,27 @@ export function applySettingsFromUrl(host: SettingsHost) {
         sessionKey: session,
         lastActiveSessionKey: session,
       });
+    }
+  }
+
+  // GBaseClaw mode: read ticket from URL, redeem for botId + email
+  const ticketRaw = params.get("ticket");
+  if (ticketRaw != null) {
+    const ticket = ticketRaw.trim();
+    if (ticket) {
+      host.gbaseClawTicket = ticket;
+      // Strip ticket from URL after reading (one-time use)
+      params.delete("ticket");
+      shouldCleanUrl = true;
+    }
+  }
+
+  // Also support direct botId for backward compatibility
+  const botIdRaw = params.get("botId");
+  if (botIdRaw != null) {
+    const botId = botIdRaw.trim();
+    if (botId) {
+      host.gbaseClawBotId = botId;
     }
   }
 
@@ -445,6 +470,12 @@ export function syncUrlWithTab(host: SettingsHost, tab: Tab, replace: boolean) {
     url.searchParams.set("session", host.sessionKey);
   } else {
     url.searchParams.delete("session");
+  }
+
+  // GBaseClaw mode: preserve botId and session across all tabs
+  if (host.gbaseClawBotId) {
+    url.searchParams.set("botId", host.gbaseClawBotId);
+    url.searchParams.set("session", `gbaseclaw:${host.gbaseClawBotId}`);
   }
 
   if (currentPath !== targetPath) {
